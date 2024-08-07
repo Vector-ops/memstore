@@ -21,9 +21,10 @@ type SetCommand struct {
 	key, value []byte
 }
 type GetCommand struct {
-	key, value []byte
+	key []byte
 }
 
+// not using
 func parseCommand(raw string) (Command, error) {
 	rd := resp.NewReader(bytes.NewBufferString(raw))
 	for {
