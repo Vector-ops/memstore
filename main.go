@@ -1,14 +1,11 @@
 package main
 
 import (
-	"context"
+	"flag"
 	"fmt"
 	"log"
 	"log/slog"
 	"net"
-	"time"
-
-	"github.com/vector-ops/goredis/client"
 )
 
 const DefaultListenAddr = ":3000"
@@ -18,7 +15,7 @@ type Config struct {
 }
 
 type Message struct {
-	data []byte
+	cmd  Command
 	peer *Peer
 }
 
@@ -57,18 +54,15 @@ func (s *Server) Start() error {
 
 	go s.loop()
 
-	slog.Info("server running", "listenAddr", s.ListenAddr)
+	slog.Info("memstore server running", "listenAddr", s.ListenAddr)
 
 	return s.acceptLoop()
 
 }
 
 func (s *Server) handleMsg(msg Message) error {
-	cmd, err := parseCommand(string(msg.data))
-	if err != nil {
-		return err
-	}
-	switch v := cmd.(type) {
+
+	switch v := msg.cmd.(type) {
 	case SetCommand:
 		return s.kv.Set(v.key, v.value)
 	case GetCommand:
@@ -120,27 +114,13 @@ func (s *Server) handleConn(conn net.Conn) {
 }
 
 func main() {
-	server := NewServer(Config{})
-	go func() {
-		log.Fatal(server.Start())
-	}()
+	var listenAddr string
+	flag.StringVar(&listenAddr, "listenAddr", DefaultListenAddr, "Specify the listen address for the goredis server or use default (3000)")
+	flag.Parse()
+	server := NewServer(Config{
+		ListenAddr: listenAddr,
+	})
 
-	time.Sleep(time.Second)
+	log.Fatal(server.Start())
 
-	client := client.New("localhost:3000")
-	for i := 0; i < 10; i++ {
-
-		if err := client.Set(context.Background(), fmt.Sprintf("sh%dt", i), fmt.Sprintf("T%dn", i)); err != nil {
-			log.Fatal(err)
-		}
-		time.Sleep(time.Second)
-		val, err := client.Get(context.Background(), fmt.Sprintf("sh%dt", i))
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		fmt.Println("Heres it: ", val)
-	}
-
-	select {}
 }
