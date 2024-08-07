@@ -1,5 +1,5 @@
 run: build
-	@./bin/goredis
+	@./bin/goredis --listenAddr :5000
 
 build: 
-	@go build -o bin/goredis .
+	@go build -o bin/goredis . 
