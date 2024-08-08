@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vector-ops/goredis/client"
+	"github.com/vector-ops/memstore/client"
 )
 
 func TestServerWithClients(t *testing.T) {

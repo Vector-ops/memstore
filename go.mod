@@ -1,5 +1,5 @@
-module github.com/vector-ops/goredis
+module github.com/vector-ops/memstore
 
 go 1.22.5
 
-require github.com/tidwall/resp v0.1.1 // indirect
+require github.com/tidwall/resp v0.1.1
