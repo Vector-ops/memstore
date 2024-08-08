@@ -12,38 +12,28 @@ import (
 type Peer struct {
 	conn  net.Conn
 	msgCh chan Message
+	delCh chan *Peer
 }
 
 func (p *Peer) Send(msg []byte) (int, error) {
 	return p.conn.Write(msg)
 }
 
-func NewPeer(conn net.Conn, msgCh chan Message) *Peer {
+func NewPeer(conn net.Conn, msgCh chan Message, delCh chan *Peer) *Peer {
 	return &Peer{
 		conn:  conn,
 		msgCh: msgCh,
+		delCh: delCh,
 	}
 }
 
 func (p *Peer) readLoop() error {
-	// buf := make([]byte, 1024)
-	// for {
-	// 	n, err := p.conn.Read(buf)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	msgBuf := make([]byte, n)
-	// 	copy(msgBuf, buf[:n])
-	// 	p.msgCh <- Message{
-	// 		data: msgBuf,
-	// 		peer: p,
-	// 	}
-	// }
 
 	rd := resp.NewReader(p.conn)
 	for {
 		v, _, err := rd.ReadValue()
 		if err == io.EOF {
+			p.delCh <- p
 			break
 		}
 		if err != nil {
