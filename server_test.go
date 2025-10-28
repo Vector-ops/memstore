@@ -20,7 +20,7 @@ func TestServerWithClients(t *testing.T) {
 	nclients := 10
 	wg := sync.WaitGroup{}
 	wg.Add(nclients)
-	for i := 0; i < nclients; i++ {
+	for i := range nclients {
 		go func(it int) {
 			client, err := client.New("localhost:3000")
 			if err != nil {

@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"strings"
 
 	"github.com/tidwall/resp"
 )
@@ -28,7 +29,6 @@ func NewPeer(conn net.Conn, msgCh chan Message, delCh chan *Peer) *Peer {
 }
 
 func (p *Peer) readLoop() error {
-
 	rd := resp.NewReader(p.conn)
 	for {
 		v, _, err := rd.ReadValue()
@@ -42,7 +42,7 @@ func (p *Peer) readLoop() error {
 
 		if v.Type() == resp.Array {
 			for _, c := range v.Array() {
-				switch c.String() {
+				switch strings.ToUpper(c.String()) {
 				case CommandGET:
 					if len(v.Array()) != 2 {
 						return fmt.Errorf("invalid number of variables for GET command")

@@ -15,7 +15,7 @@ func TestNewClient(t *testing.T) {
 	}
 
 	time.Sleep(time.Second)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if err := client.Set(context.Background(), fmt.Sprintf("sh%dt", i), fmt.Sprintf("T%dn", i)); err != nil {
 			log.Fatal(err)
 		}
@@ -26,5 +26,4 @@ func TestNewClient(t *testing.T) {
 
 		fmt.Println("Heres it: ", val)
 	}
-
 }
