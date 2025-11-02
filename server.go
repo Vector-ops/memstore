@@ -1,13 +1,20 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"fmt"
+	"log"
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 )
 
 type Config struct {
-	ListenAddr string
+	NodeConfig
+
+	Replicas []NodeConfig
 }
 
 type Message struct {
@@ -24,20 +31,18 @@ type Server struct {
 	quitCh    chan struct{}
 	msgCh     chan Message
 
-	kv *KV
+	kv       *KV
+	hashRing *HashRing
 
 	mu *sync.Mutex
 	wg *sync.WaitGroup
 }
 
 func NewServer(cfg Config) *Server {
-	if len(cfg.ListenAddr) == 0 {
-		cfg.ListenAddr = DefaultListenAddr
-	}
-
 	return &Server{
 		Config:    cfg,
 		peers:     make(map[*Peer]bool),
+		hashRing:  NewHashRing(),
 		addPeerCh: make(chan *Peer),
 		delPeerCh: make(chan *Peer),
 		quitCh:    make(chan struct{}),
@@ -49,7 +54,7 @@ func NewServer(cfg Config) *Server {
 }
 
 func (s *Server) Start() error {
-	ln, err := net.Listen("tcp", s.ListenAddr)
+	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%s", s.Host, s.Port))
 	if err != nil {
 		return err
 	}
@@ -57,7 +62,9 @@ func (s *Server) Start() error {
 
 	go s.loop()
 
-	slog.Info("memstore server running", "listenAddr", s.ListenAddr)
+	slog.Info("memstore server running", "listenAddr", s.Host+":"+s.Port)
+
+	s.registerReplicas(context.Background())
 
 	return s.acceptLoop()
 }
@@ -65,14 +72,45 @@ func (s *Server) Start() error {
 func (s *Server) handleMsg(msg Message) error {
 	switch v := msg.cmd.(type) {
 	case SetCommand:
-		return s.kv.Set(v.key, v.value)
+		if err := s.kv.Set(v.key, v.value); err != nil {
+			return err
+		}
+		if err := s.hashRing.StoreKey(string(v.key), v.value); err != nil {
+			slog.Error("node store error", "err", err)
+		}
+
 	case GetCommand:
+		var err error
 		val, ok := s.kv.Get(v.key)
 		if !ok {
-			val = []byte("nil")
+			val, err = s.hashRing.RetrieveKey(string(v.key))
+			if err != nil {
+				val = []byte("nil")
+			}
 		}
 		val = append(val, '\n')
-		_, err := msg.peer.Send(val)
+		_, err = msg.peer.Send(val)
+		if err != nil {
+			slog.Error("peer send error", "err", err)
+		}
+
+	case KeysCommand:
+		var buf bytes.Buffer
+		keys, ok := s.kv.Keys()
+		if ok {
+			if _, err := buf.Write(keys); err != nil {
+				slog.Error("keys not found on master", "err", err)
+			}
+		}
+
+		nodeKeys, err := s.hashRing.RetrieveKeys()
+		if err == nil {
+			if _, err := buf.Write(nodeKeys); err != nil {
+				slog.Error("keys not found on master", "err", err)
+			}
+		}
+
+		_, err = msg.peer.Send(buf.Bytes())
 		if err != nil {
 			slog.Error("peer send error", "err", err)
 		}
@@ -117,5 +155,26 @@ func (s *Server) handleConn(conn net.Conn) {
 	s.addPeerCh <- peer
 	if err := peer.readLoop(); err != nil {
 		slog.Error("peer read error", "err", err, "remoteAddr", conn.RemoteAddr())
+	}
+}
+
+func (s *Server) registerReplicas(ctx context.Context) {
+	for _, config := range s.Config.Replicas {
+		go func(config NodeConfig) {
+			for {
+				addr := formatHostPort(config.Host, config.Port)
+				conn, err := net.Dial("tcp", addr)
+				if err != nil {
+					// log.Printf("Failed to connect to replica %s: %v\n", config.Id, err)
+					// log.Println("Trying again in 5s")
+					time.Sleep(time.Second * 5)
+					continue
+				}
+				peer := NewPeer(conn, s.msgCh, s.delPeerCh)
+				s.hashRing.AddNode(config.Id, peer)
+				log.Printf("Connected to replica %s", conn.RemoteAddr())
+				break
+			}
+		}(config)
 	}
 }
