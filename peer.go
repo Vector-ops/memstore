@@ -20,6 +20,12 @@ func (p *Peer) Send(msg []byte) (int, error) {
 	return p.conn.Write(msg)
 }
 
+func (p *Peer) Read() ([]byte, error) {
+	var msg []byte
+	_, err := p.conn.Read(msg)
+	return msg, err
+}
+
 func NewPeer(conn net.Conn, msgCh chan Message, delCh chan *Peer) *Peer {
 	return &Peer{
 		conn:  conn,
