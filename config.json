@@ -1,0 +1,20 @@
+[
+  {
+    "id": "1",
+    "host": "localhost",
+    "port": "3001",
+    "role": "master"
+  },
+  {
+    "id": "2",
+    "host": "localhost",
+    "port": "3002",
+    "role": "replica"
+  },
+  {
+    "id": "3",
+    "host": "localhost",
+    "port": "3003",
+    "role": "replica"
+  }
+]
