@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"bytes"
@@ -9,30 +9,32 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/vector-ops/memstore/internal/cluster"
+	"github.com/vector-ops/memstore/internal/config"
+	"github.com/vector-ops/memstore/internal/protocol"
+	"github.com/vector-ops/memstore/internal/storage"
+	"github.com/vector-ops/memstore/internal/transport"
+	"github.com/vector-ops/memstore/internal/utils"
 )
 
 type Config struct {
-	NodeConfig
+	config.NodeConfig
 
-	Replicas []NodeConfig
-}
-
-type Message struct {
-	cmd  Command
-	peer *Peer
+	Replicas []config.NodeConfig
 }
 
 type Server struct {
 	Config
-	peers     map[*Peer]bool
+	peers     map[transport.Transport]bool
 	ln        net.Listener
-	addPeerCh chan *Peer
-	delPeerCh chan *Peer
+	addPeerCh chan transport.Transport
+	delPeerCh chan transport.Transport
 	quitCh    chan struct{}
-	msgCh     chan Message
+	msgCh     chan transport.Message
 
-	kv       *KV
-	hashRing *HashRing
+	kv       *storage.KV
+	hashRing *cluster.HashRing
 
 	mu *sync.Mutex
 	wg *sync.WaitGroup
@@ -41,13 +43,13 @@ type Server struct {
 func NewServer(cfg Config) *Server {
 	return &Server{
 		Config:    cfg,
-		peers:     make(map[*Peer]bool),
-		hashRing:  NewHashRing(),
-		addPeerCh: make(chan *Peer),
-		delPeerCh: make(chan *Peer),
+		peers:     make(map[transport.Transport]bool),
+		hashRing:  cluster.NewHashRing(),
+		addPeerCh: make(chan transport.Transport),
+		delPeerCh: make(chan transport.Transport),
 		quitCh:    make(chan struct{}),
-		msgCh:     make(chan Message),
-		kv:        NewKeyVal(),
+		msgCh:     make(chan transport.Message),
+		kv:        storage.NewKeyVal(),
 		mu:        &sync.Mutex{},
 		wg:        &sync.WaitGroup{},
 	}
@@ -69,32 +71,32 @@ func (s *Server) Start() error {
 	return s.acceptLoop()
 }
 
-func (s *Server) handleMsg(msg Message) error {
-	switch v := msg.cmd.(type) {
-	case SetCommand:
-		if err := s.kv.Set(v.key, v.value); err != nil {
+func (s *Server) handleMsg(msg transport.Message) error {
+	switch v := msg.Cmd.(type) {
+	case protocol.SetCommand:
+		if err := s.kv.Set(v.Key, v.Value); err != nil {
 			return err
 		}
-		if err := s.hashRing.StoreKey(string(v.key), v.value); err != nil {
+		if err := s.hashRing.StoreKey(string(v.Key), v.Value); err != nil {
 			slog.Error("node store error", "err", err)
 		}
 
-	case GetCommand:
+	case protocol.GetCommand:
 		var err error
-		val, ok := s.kv.Get(v.key)
+		val, ok := s.kv.Get(v.Key)
 		if !ok {
-			val, err = s.hashRing.RetrieveKey(string(v.key))
+			val, err = s.hashRing.RetrieveKey(string(v.Key))
 			if err != nil {
 				val = []byte("nil")
 			}
 		}
 		val = append(val, '\n')
-		_, err = msg.peer.Send(val)
+		_, err = msg.Transport.Send(val)
 		if err != nil {
 			slog.Error("peer send error", "err", err)
 		}
 
-	case KeysCommand:
+	case protocol.KeysCommand:
 		var buf bytes.Buffer
 		keys, ok := s.kv.Keys()
 		if ok {
@@ -110,7 +112,7 @@ func (s *Server) handleMsg(msg Message) error {
 			}
 		}
 
-		_, err = msg.peer.Send(buf.Bytes())
+		_, err = msg.Transport.Send(buf.Bytes())
 		if err != nil {
 			slog.Error("peer send error", "err", err)
 		}
@@ -128,11 +130,11 @@ func (s *Server) loop() {
 		case <-s.quitCh:
 			return
 		case peer := <-s.addPeerCh:
-			slog.Info("new peer connected", "remoteAddr", peer.conn.RemoteAddr())
+			slog.Info("new peer connected", "remoteAddr", peer.GetRemoteAddress())
 			s.peers[peer] = true
 
 		case peer := <-s.delPeerCh:
-			slog.Info("peer disconnected", "remoteAddr", peer.conn.RemoteAddr())
+			slog.Info("peer disconnected", "remoteAddr", peer.GetRemoteAddress())
 			delete(s.peers, peer)
 		}
 	}
@@ -151,30 +153,30 @@ func (s *Server) acceptLoop() error {
 }
 
 func (s *Server) handleConn(conn net.Conn) {
-	peer := NewPeer(conn, s.msgCh, s.delPeerCh)
+	peer := transport.NewTCPTransport(conn, s.msgCh, s.delPeerCh)
 	s.addPeerCh <- peer
-	if err := peer.readLoop(); err != nil {
+	if err := peer.ReadLoop(); err != nil {
 		slog.Error("peer read error", "err", err, "remoteAddr", conn.RemoteAddr())
 	}
 }
 
 func (s *Server) registerReplicas(ctx context.Context) {
-	for _, config := range s.Config.Replicas {
-		go func(config NodeConfig) {
+	for _, cfg := range s.Config.Replicas {
+		go func(cfg config.NodeConfig) {
 			for {
-				addr := formatHostPort(config.Host, config.Port)
+				addr := utils.FormatHostPort(cfg.Host, cfg.Port)
 				conn, err := net.Dial("tcp", addr)
 				if err != nil {
-					// log.Printf("Failed to connect to replica %s: %v\n", config.Id, err)
+					// log.Printf("Failed to connect to replica %s: %v\n", cfg.Id, err)
 					// log.Println("Trying again in 5s")
 					time.Sleep(time.Second * 5)
 					continue
 				}
-				peer := NewPeer(conn, s.msgCh, s.delPeerCh)
-				s.hashRing.AddNode(config.Id, peer)
+				peer := transport.NewTCPTransport(conn, s.msgCh, s.delPeerCh)
+				s.hashRing.AddNode(cfg.Id, peer)
 				log.Printf("Connected to replica %s", conn.RemoteAddr())
 				break
 			}
-		}(config)
+		}(cfg)
 	}
 }

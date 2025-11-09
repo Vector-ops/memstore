@@ -1,4 +1,4 @@
-package main
+package cluster
 
 import (
 	"bytes"
@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	"github.com/tidwall/resp"
+	"github.com/vector-ops/memstore/internal/protocol"
+	"github.com/vector-ops/memstore/internal/transport"
 )
 
 var (
@@ -19,8 +21,8 @@ var (
 )
 
 type Node struct {
-	ID   string
-	Peer *Peer
+	ID        string
+	Transport transport.Transport
 }
 
 type HashRing struct {
@@ -41,14 +43,21 @@ func (r *HashRing) hash(key string) uint32 {
 	return crc32.ChecksumIEEE([]byte(key))
 }
 
-func (r *HashRing) AddNode(id string, p *Peer) {
+func (r *HashRing) AddNode(id string, p transport.Transport) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	peerId, err := p.Ping()
+	if err != nil {
+		slog.Error("Failed to add node", "node id", id, "error", err)
+	}
+
+	slog.Info("Successful ping", "node id: ", id, "recieved id: ", peerId)
+
 	hash := r.hash(id)
 	node := &Node{
-		ID:   id,
-		Peer: p,
+		ID:        id,
+		Transport: p,
 	}
 	r.nodes[hash] = node
 	r.hashes = append(r.hashes, hash)
@@ -75,7 +84,7 @@ func (r *HashRing) RemoveNode(id string) {
 	nextNode := r.nodes[r.hashes[nextNodeIndex]]
 
 	// bulk copy all current node's keys to the next node
-	// copy(node.peer.keys, nextNode.peer.keys)
+	// copy(node.Transport.keys, nextNode.Transport.keys)
 	_, _ = node, nextNode
 
 	// remove node from map
@@ -118,12 +127,12 @@ func (r *HashRing) StoreKey(key string, value []byte) error {
 	var buf bytes.Buffer
 	wr := resp.NewWriter(&buf)
 	wr.WriteArray([]resp.Value{
-		resp.StringValue(CommandSET),
+		resp.StringValue(protocol.CommandSET),
 		resp.StringValue(key),
 		resp.StringValue(string(value)),
 	})
 
-	_, err := node.Peer.Send(buf.Bytes())
+	_, err := node.Transport.Send(buf.Bytes())
 
 	return err
 }
@@ -137,16 +146,16 @@ func (r *HashRing) RetrieveKey(key string) ([]byte, error) {
 	var buf bytes.Buffer
 	wr := resp.NewWriter(&buf)
 	wr.WriteArray([]resp.Value{
-		resp.StringValue(CommandGET),
+		resp.StringValue(protocol.CommandGET),
 		resp.StringValue(key),
 	})
 
-	_, err := node.Peer.Send(buf.Bytes())
+	_, err := node.Transport.Send(buf.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("node id: %s, %w", node.ID, err)
 	}
 
-	value, err := node.Peer.Read()
+	value, err := node.Transport.Read()
 	if err != nil {
 		return nil, fmt.Errorf("node id: %s, %w", node.ID, err)
 	}
@@ -162,18 +171,18 @@ func (r *HashRing) RetrieveKeys() ([]byte, error) {
 	var buf bytes.Buffer
 	wr := resp.NewWriter(&buf)
 	wr.WriteArray([]resp.Value{
-		resp.StringValue(CommandKEYS),
+		resp.StringValue(protocol.CommandKEYS),
 	})
 
 	var resBuf bytes.Buffer
 	for _, node := range r.nodes {
-		_, err := node.Peer.Send(buf.Bytes())
+		_, err := node.Transport.Send(buf.Bytes())
 		if err != nil {
 			slog.Error(fmt.Sprintf("node id: %s", node.ID), "err", err)
 			continue
 		}
 
-		value, err := node.Peer.Read()
+		value, err := node.Transport.Read()
 		if err != nil {
 			slog.Error(fmt.Sprintf("node id: %s", node.ID), "err", err)
 			continue

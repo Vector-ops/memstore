@@ -1,4 +1,4 @@
-package main
+package protocol
 
 const (
 	CommandSET  = "SET"
@@ -9,10 +9,10 @@ const (
 type Command interface{}
 
 type SetCommand struct {
-	key, value []byte
+	Key, Value []byte
 }
 type GetCommand struct {
-	key []byte
+	Key []byte
 }
 
 type KeysCommand struct{}

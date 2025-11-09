@@ -1,11 +1,11 @@
-package main
+package utils
 
 import (
 	"fmt"
 	"net"
 )
 
-func formatHostPort(host, port string) string {
+func FormatHostPort(host, port string) string {
 	ip := net.ParseIP(host)
 	if ip != nil && ip.To4() == nil {
 		return fmt.Sprintf("[%s]:%s", host, port)

@@ -5,14 +5,10 @@ import (
 	"flag"
 	"log"
 	"os"
-)
 
-type NodeConfig struct {
-	Id   string `json:"id"`
-	Host string `json:"host"`
-	Port string `json:"port"`
-	Role string `json:"role"`
-}
+	"github.com/vector-ops/memstore/internal/config"
+	"github.com/vector-ops/memstore/internal/server"
+)
 
 func main() {
 	var nodeId string
@@ -31,13 +27,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var nodes []NodeConfig
+	var nodes []config.NodeConfig
 	if err = json.NewDecoder(f).Decode(&nodes); err != nil {
 		log.Fatal(err)
 	}
 
-	var serverConfig NodeConfig
-	replicas := make([]NodeConfig, 0)
+	var serverConfig config.NodeConfig
+	replicas := make([]config.NodeConfig, 0)
 	for _, n := range nodes {
 		if n.Id == nodeId {
 			serverConfig = n
@@ -56,7 +52,7 @@ func main() {
 		}
 	}
 
-	server := NewServer(Config{
+	server := server.NewServer(server.Config{
 		NodeConfig: serverConfig,
 		Replicas:   replicas,
 	})
