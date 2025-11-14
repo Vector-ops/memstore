@@ -1,5 +1,5 @@
 run: build
-	@./bin/goredis --listenAddr :5000
+	@./bin/memstore -node-id 1
 
-build: 
-	@go build -o bin/goredis . 
+build:
+	@go build -o bin/memstore ./cmd/main.go
