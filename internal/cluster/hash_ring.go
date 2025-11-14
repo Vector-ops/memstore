@@ -43,25 +43,28 @@ func (r *HashRing) hash(key string) uint32 {
 	return crc32.ChecksumIEEE([]byte(key))
 }
 
-func (r *HashRing) AddNode(id string, p transport.Transport) {
+func (r *HashRing) AddNode(p transport.Transport) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	peerId, err := p.Ping()
 	if err != nil {
-		slog.Error("Failed to add node", "node id", id, "error", err)
+		slog.Error("Failed to add node", "node remote address", p.GetRemoteAddress(), "error", err)
+		return err
 	}
 
-	slog.Info("Successful ping", "node id: ", id, "recieved id: ", peerId)
+	slog.Info("Successful ping", "node id: ", peerId)
 
-	hash := r.hash(id)
+	hash := r.hash(peerId)
 	node := &Node{
-		ID:        id,
+		ID:        peerId,
 		Transport: p,
 	}
 	r.nodes[hash] = node
 	r.hashes = append(r.hashes, hash)
 	slices.Sort(r.hashes)
+
+	return nil
 }
 
 func (r *HashRing) nextNodeIndex(hash uint32) int {
