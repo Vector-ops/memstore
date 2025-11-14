@@ -15,9 +15,9 @@ func TestHashRing(t *testing.T) {
 	node3 := transport.NewMockTransport()
 
 	log.Printf("----------Ping Commands-------")
-	hashRing.AddNode("1", node1)
-	hashRing.AddNode("2", node2)
-	hashRing.AddNode("3", node3)
+	hashRing.AddNode(node1)
+	hashRing.AddNode(node2)
+	hashRing.AddNode(node3)
 
 	log.Printf("----------Set Commands-------")
 	hashRing.StoreKey("animal", []byte("345"))
