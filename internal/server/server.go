@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/vector-ops/memstore/internal/cluster"
 	"github.com/vector-ops/memstore/internal/config"
 	"github.com/vector-ops/memstore/internal/protocol"
@@ -26,6 +27,7 @@ type Config struct {
 
 type Server struct {
 	Config
+	id        uuid.UUID
 	peers     map[transport.Transport]bool
 	ln        net.Listener
 	addPeerCh chan transport.Transport
@@ -43,6 +45,7 @@ type Server struct {
 func NewServer(cfg Config) *Server {
 	return &Server{
 		Config:    cfg,
+		id:        uuid.New(),
 		peers:     make(map[transport.Transport]bool),
 		hashRing:  cluster.NewHashRing(),
 		addPeerCh: make(chan transport.Transport),
@@ -111,10 +114,25 @@ func (s *Server) handleMsg(msg transport.Message) error {
 				slog.Error("keys not found on master", "err", err)
 			}
 		}
+		buf.WriteByte('\n')
 
 		_, err = msg.Transport.Send(buf.Bytes())
 		if err != nil {
 			slog.Error("peer send error", "err", err)
+		}
+
+	case protocol.PingCommand:
+		var buf bytes.Buffer
+		if _, err := buf.WriteString(s.id.String()); err != nil {
+			slog.Error("Failed to write to buffer", "err", err)
+		}
+		if err := buf.WriteByte('\n'); err != nil {
+			slog.Error("Failed to write to buffer", "err", err)
+		}
+
+		_, err := msg.Transport.Send(buf.Bytes())
+		if err != nil {
+			slog.Error("peer send eror", "err", err)
 		}
 	}
 	return nil
@@ -173,7 +191,7 @@ func (s *Server) registerReplicas(ctx context.Context) {
 					continue
 				}
 				peer := transport.NewTCPTransport(conn, s.msgCh, s.delPeerCh)
-				s.hashRing.AddNode(cfg.Id, peer)
+				s.hashRing.AddNode(peer)
 				log.Printf("Connected to replica %s", conn.RemoteAddr())
 				break
 			}
