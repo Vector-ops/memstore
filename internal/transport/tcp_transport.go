@@ -87,7 +87,7 @@ func (p *TCPTransport) ReadLoop() error {
 					}
 				case protocol.CommandKEYS:
 					if len(v.Array()) != 1 {
-						return fmt.Errorf("invalid number of variables for PING command")
+						return fmt.Errorf("invalid number of variables for KEYS command")
 					}
 					cmd := protocol.KeysCommand{}
 					p.msgCh <- Message{
