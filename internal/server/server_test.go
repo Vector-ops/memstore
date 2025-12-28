@@ -12,7 +12,7 @@ import (
 )
 
 func TestServerWithClients(t *testing.T) {
-	server := NewServer(Config{})
+	server := NewServer("localhost:8000")
 	go func() {
 		log.Fatal(server.Start())
 	}()
