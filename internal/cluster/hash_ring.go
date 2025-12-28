@@ -20,11 +20,6 @@ var (
 	ErrRetreiveFailed = errors.New("Failed to retrieve key from node")
 )
 
-type Node struct {
-	ID        string
-	Transport transport.Transport
-}
-
 type HashRing struct {
 	mu     *sync.RWMutex
 	hashes []uint32
