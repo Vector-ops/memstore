@@ -10,11 +10,12 @@ import (
 var ErrTooManyNodes = errors.New("cluster error: replica count exceeds configured count")
 
 type ClusterManager struct {
-	replicaCount int
+	hbChan chan bool
 
 	// replication
-	replicas map[string]*Node
-	hr       *HashRing
+	replicaCount int
+	replicas     map[string]*Node
+	hr           *HashRing
 }
 
 func NewClusterManager(role Role, replicaCount int) *ClusterManager {
@@ -57,4 +58,21 @@ func (cm *ClusterManager) RemoveNode(id string) error {
 	delete(cm.replicas, id)
 
 	return nil
+}
+
+func (cm *ClusterManager) StartHeartbeat() {
+	cm.hbChan = make(chan bool)
+	go func() {
+		select {
+		case <-cm.hbChan:
+			return
+		default:
+		}
+
+		// TODO: send heartbeat pings
+	}()
+}
+
+func (cm *ClusterManager) StopHeartbeat() {
+	close(cm.hbChan)
 }
