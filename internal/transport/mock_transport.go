@@ -19,6 +19,11 @@ type MockTransport struct {
 	prevKey     string
 }
 
+// Close implements [Transport].
+func (t *MockTransport) Close() {
+	panic("unimplemented")
+}
+
 func NewMockTransport() Transport {
 	return &MockTransport{
 		id:         strconv.Itoa(rand.Int()),

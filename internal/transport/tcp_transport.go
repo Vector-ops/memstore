@@ -17,6 +17,15 @@ type TCPTransport struct {
 	delCh chan Transport
 }
 
+// Close implements [Transport].
+func (t *TCPTransport) Close() {
+	log.Println("Closing")
+	_ = t.conn.Close()
+	log.Println("Closed")
+
+	t.delCh <- t
+}
+
 func (t *TCPTransport) Ping() (string, error) {
 	return "", fmt.Errorf("Ping not implemented")
 }
@@ -29,13 +38,13 @@ func (t *TCPTransport) GetLocalAddress() string {
 	return t.conn.LocalAddr().String()
 }
 
-func (p *TCPTransport) Send(msg []byte) (int, error) {
-	return p.conn.Write(msg)
+func (t *TCPTransport) Send(msg []byte) (int, error) {
+	return t.conn.Write(msg)
 }
 
-func (p *TCPTransport) Read() ([]byte, error) {
+func (t *TCPTransport) Read() ([]byte, error) {
 	var msg []byte
-	_, err := p.conn.Read(msg)
+	_, err := t.conn.Read(msg)
 	return msg, err
 }
 
@@ -47,12 +56,12 @@ func NewTCPTransport(conn net.Conn, msgCh chan Message, delCh chan Transport) Tr
 	}
 }
 
-func (p *TCPTransport) ReadLoop() error {
-	rd := resp.NewReader(p.conn)
+func (t *TCPTransport) ReadLoop() error {
+	rd := resp.NewReader(t.conn)
 	for {
 		v, _, err := rd.ReadValue()
 		if err == io.EOF {
-			p.delCh <- p
+			t.delCh <- t
 			break
 		}
 		if err != nil {
@@ -69,9 +78,9 @@ func (p *TCPTransport) ReadLoop() error {
 					cmd := protocol.GetCommand{
 						Key: v.Array()[1].Bytes(),
 					}
-					p.msgCh <- Message{
+					t.msgCh <- Message{
 						Cmd:       cmd,
-						Transport: p,
+						Transport: t,
 					}
 				case protocol.CommandSET:
 					if len(v.Array()) != 3 {
@@ -81,27 +90,27 @@ func (p *TCPTransport) ReadLoop() error {
 						Key:   v.Array()[1].Bytes(),
 						Value: v.Array()[2].Bytes(),
 					}
-					p.msgCh <- Message{
+					t.msgCh <- Message{
 						Cmd:       cmd,
-						Transport: p,
+						Transport: t,
 					}
 				case protocol.CommandKEYS:
 					if len(v.Array()) != 1 {
 						return fmt.Errorf("invalid number of variables for KEYS command")
 					}
 					cmd := protocol.KeysCommand{}
-					p.msgCh <- Message{
+					t.msgCh <- Message{
 						Cmd:       cmd,
-						Transport: p,
+						Transport: t,
 					}
 				case protocol.CommandPING:
 					if len(v.Array()) != 1 {
 						return fmt.Errorf("invalid number of variables for PING command")
 					}
 					cmd := protocol.PingCommand{}
-					p.msgCh <- Message{
+					t.msgCh <- Message{
 						Cmd:       cmd,
-						Transport: p,
+						Transport: t,
 					}
 				default:
 				}

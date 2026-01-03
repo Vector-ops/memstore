@@ -5,6 +5,7 @@ type Transport interface {
 	Send([]byte) (int, error)
 	Read() ([]byte, error)
 	ReadLoop() error
+	Close()
 	GetRemoteAddress() string
 	GetLocalAddress() string
 }

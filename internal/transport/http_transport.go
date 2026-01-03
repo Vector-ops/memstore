@@ -4,6 +4,11 @@ type HttpTransport struct {
 	connectionStr string
 }
 
+// Close implements [Transport].
+func (h *HttpTransport) Close() {
+	panic("unimplemented")
+}
+
 func NewHttpTransport(connectionStr string) Transport {
 	return &HttpTransport{
 		connectionStr: connectionStr,
