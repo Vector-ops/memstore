@@ -9,12 +9,6 @@ import (
 )
 
 func main() {
-	var nodeID string
-	flag.StringVar(&nodeID, "node-id", "", "Specify the node id to start")
-
-	// var configPath string
-	// flag.StringVar(&configPath, "config", "", "Path to config file")
-	// flag.Parse()
 
 	var tcpAddr string
 	flag.StringVar(&tcpAddr, "tcp", "", "Specify the tcp address for the server")
@@ -34,14 +28,15 @@ func main() {
 	var pollInterval int
 	flag.IntVar(&pollInterval, "poll", 0, "Specify the leader poll interval in milliseconds")
 
+	flag.Parse()
+
 	cfg := server.ServerConfig{
 
 		ServerAddr: tcpAddr,
 		LeaderAddr: leaderAddr,
-		// Replicas:              replicas,
+
 		ReplicationTimeout:    time.Duration(replicaTimeout) * time.Millisecond,
 		ReplicationMaxRetries: replicationMaxRetries,
-		// PollInterval:          time.Duration(pollInterval) * time.Millisecond,
 	}
 
 	// if configPath != "" {
