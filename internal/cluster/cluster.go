@@ -1,52 +1,33 @@
+// Package cluster provides an interface to communnicate and manage other nodes on the cluster
 package cluster
 
 import (
 	"errors"
 
-	"github.com/vector-ops/memstore/internal/config"
-	"github.com/vector-ops/memstore/internal/server"
 	"github.com/vector-ops/memstore/internal/transport"
 )
 
-var ErrTooManyNodes = errors.New("Cluster Error: Replica count exceeds configured count")
+var ErrTooManyNodes = errors.New("cluster error: replica count exceeds configured count")
 
 type ClusterManager struct {
-	config.ServerConfig
-
-	currentNode *Node
+	replicaCount int
 
 	// replication
 	replicas map[string]*Node
 	hr       *HashRing
 }
 
-func NewClusterManager(cfg config.ServerConfig) *ClusterManager {
-	var role Role
-	if cfg.LeaderAddr == cfg.ClusterAddr {
-		role = LEADER
-	}
-
-	currentNode := NewNode(cfg.Id, cfg.ServerAddr, role, nil)
-
-	s := server.NewServer(cfg.ServerAddr)
-
-	currentNode.SetServer(s)
+func NewClusterManager(role Role, replicaCount int) *ClusterManager {
 
 	return &ClusterManager{
-		ServerConfig: cfg,
-
-		currentNode: currentNode,
-		replicas:    make(map[string]*Node),
-		hr:          NewHashRing(),
+		replicaCount: replicaCount,
+		replicas:     make(map[string]*Node),
+		hr:           NewHashRing(),
 	}
-}
-
-func (cm *ClusterManager) Start() error {
-	return cm.currentNode.server.Start()
 }
 
 func (cm *ClusterManager) AddNode(connectionString, id string, role Role) error {
-	if cm.ReplicaCount > len(cm.replicas) {
+	if cm.replicaCount > len(cm.replicas) {
 		return ErrTooManyNodes
 	}
 

@@ -5,13 +5,12 @@ import (
 	"log"
 	"time"
 
-	"github.com/vector-ops/memstore/internal/config"
 	"github.com/vector-ops/memstore/internal/server"
 )
 
 func main() {
-	var nodeId string
-	flag.StringVar(&nodeId, "node-id", "", "Specify the node id to start")
+	var nodeID string
+	flag.StringVar(&nodeID, "node-id", "", "Specify the node id to start")
 
 	// var configPath string
 	// flag.StringVar(&configPath, "config", "", "Path to config file")
@@ -35,14 +34,14 @@ func main() {
 	var pollInterval int
 	flag.IntVar(&pollInterval, "poll", 0, "Specify the leader poll interval in milliseconds")
 
-	cfg := config.ServerConfig{
-		Id:                    nodeId,
-		TCPAddr:               tcpAddr,
-		LeaderAddr:            leaderAddr,
-		Replicas:              replicas,
+	cfg := server.ServerConfig{
+
+		ServerAddr: tcpAddr,
+		LeaderAddr: leaderAddr,
+		// Replicas:              replicas,
 		ReplicationTimeout:    time.Duration(replicaTimeout) * time.Millisecond,
 		ReplicationMaxRetries: replicationMaxRetries,
-		PollInterval:          time.Duration(pollInterval) * time.Millisecond,
+		// PollInterval:          time.Duration(pollInterval) * time.Millisecond,
 	}
 
 	// if configPath != "" {

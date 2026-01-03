@@ -1,3 +1,4 @@
+// Package server provides the main server that handles the KV store and participates in cluster operations
 package server
 
 import (
@@ -5,16 +6,38 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/vector-ops/memstore/internal/cluster"
 	"github.com/vector-ops/memstore/internal/protocol"
 	"github.com/vector-ops/memstore/internal/storage"
 	"github.com/vector-ops/memstore/internal/transport"
 )
 
+type ServerConfig struct {
+	ServerAddr  string
+	ClusterAddr string
+	LeaderAddr  string
+
+	// leader config
+	HeartbeatInterval     time.Duration
+	ReplicationTimeout    time.Duration
+	ReplicationMaxRetries int
+	ReplicaCount          int
+
+	// follower config
+	HeartbeatTimeout time.Duration
+}
+
 type Server struct {
-	id        uuid.UUID
-	addr      string
+	// server internals
+	id  uuid.UUID
+	cfg ServerConfig
+	mu  *sync.Mutex
+	wg  *sync.WaitGroup
+
+	// network
 	peers     map[transport.Transport]bool
 	ln        net.Listener
 	addPeerCh chan transport.Transport
@@ -22,15 +45,21 @@ type Server struct {
 	quitCh    chan struct{}
 	msgCh     chan transport.Message
 
+	// cluster
+	role     cluster.Role
+	clstrMgr *cluster.ClusterManager
+
+	// database
 	kv *storage.KV
-	mu *sync.Mutex
-	wg *sync.WaitGroup
 }
 
-func NewServer(addr string) *Server {
+func NewServer(cfg ServerConfig) *Server {
+
+	clstrMgr := cluster.NewClusterManager(cluster.FOLLOWER, cfg.ReplicaCount)
+
 	return &Server{
 		id:        uuid.New(),
-		addr:      addr,
+		cfg:       cfg,
 		peers:     make(map[transport.Transport]bool),
 		addPeerCh: make(chan transport.Transport),
 		delPeerCh: make(chan transport.Transport),
@@ -39,11 +68,14 @@ func NewServer(addr string) *Server {
 		kv:        storage.NewKeyVal(),
 		mu:        &sync.Mutex{},
 		wg:        &sync.WaitGroup{},
+
+		clstrMgr: clstrMgr,
+		role:     cluster.FOLLOWER,
 	}
 }
 
 func (s *Server) Start() error {
-	ln, err := net.Listen("tcp", s.addr)
+	ln, err := net.Listen("tcp", s.cfg.ServerAddr)
 	if err != nil {
 		return err
 	}
@@ -51,7 +83,7 @@ func (s *Server) Start() error {
 
 	go s.loop()
 
-	slog.Info("memstore server running", "listenAddr", s.addr)
+	slog.Info("memstore server running", "listenAddr", s.cfg.ServerAddr)
 
 	return s.acceptLoop()
 }

@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"github.com/vector-ops/memstore/internal/server"
 	"github.com/vector-ops/memstore/internal/transport"
 )
 
@@ -14,7 +13,6 @@ const (
 )
 
 type Node struct {
-	server           *server.Server // database server used for current node
 	ID               string
 	ConnectionString string
 	Transport        transport.Transport // replica transport
@@ -29,10 +27,6 @@ func NewNode(id, connectionString string, role Role, t transport.Transport) *Nod
 		Role:             role,
 		Transport:        t,
 	}
-}
-
-func (n *Node) SetServer(s *server.Server) {
-	n.server = s
 }
 
 func (n *Node) SetRole(r Role) {

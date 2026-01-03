@@ -15,9 +15,9 @@ import (
 )
 
 var (
-	ErrNodeNotFound   = errors.New("Node(s) not found")
-	ErrStoreFailed    = errors.New("Failed to store key on node")
-	ErrRetreiveFailed = errors.New("Failed to retrieve key from node")
+	ErrNodeNotFound   = errors.New("node(s) not found")
+	ErrStoreFailed    = errors.New("failed to store key on node")
+	ErrRetreiveFailed = errors.New("failed to retrieve key from node")
 )
 
 type HashRing struct {
@@ -42,17 +42,17 @@ func (r *HashRing) AddNode(p transport.Transport) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	peerId, err := p.Ping()
+	peerID, err := p.Ping()
 	if err != nil {
 		slog.Error("Failed to add node", "node remote address", p.GetRemoteAddress(), "error", err)
 		return err
 	}
 
-	slog.Info("Successful ping", "node id: ", peerId)
+	slog.Info("Successful ping", "node id: ", peerID)
 
-	hash := r.hash(peerId)
+	hash := r.hash(peerID)
 	node := &Node{
-		ID:        peerId,
+		ID:        peerID,
 		Transport: p,
 	}
 	r.nodes[hash] = node
